@@ -41,12 +41,16 @@ setup(
     license='TODO: License declaration',
     tests_require=['pytest'],
             entry_points={
-                               'console_scripts': [
-                       'ik_solver = da_vinci_tool_integration.ik_solver:main',
-                       'interactive_target_marker = da_vinci_tool_integration.interactive_target_marker:main',
-                       'fk_query = da_vinci_tool_integration.fk_query:main',
-                       'tf_pose_logger = da_vinci_tool_integration.tf_pose_logger:main',
-                       'batch_pose_tester = da_vinci_tool_integration.batch_pose_tester:main',
-                   ],
+                                                      'console_scripts': [
+                           'ik_solver = da_vinci_tool_integration.ik_solver:main',
+                           'interactive_target_marker = da_vinci_tool_integration.interactive_target_marker:main',
+                           'fk_query = da_vinci_tool_integration.fk_query:main',
+                           'tf_pose_logger = da_vinci_tool_integration.tf_pose_logger:main',
+                           'batch_pose_tester = da_vinci_tool_integration.batch_pose_tester:main',
+                           'gui_pose_publisher = da_vinci_tool_integration.gui_pose_publisher:main',
+                           'rcm_marker = da_vinci_tool_integration.rcm_marker_publisher:main',
+                           'rcm_manager = da_vinci_tool_integration.rcm_manager:main',
+                           'ps5_teleop_rcm = da_vinci_tool_integration.ps5_teleop_rcm:main',
+                       ],
         },
 )

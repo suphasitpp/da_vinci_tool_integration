@@ -268,6 +268,20 @@ Visualization Manager:
       Show Descriptions: false
       Show Visual Aids: false
       Value: true
+    - Class: rviz_default_plugins/Marker
+      Enabled: true
+      Marker Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /tip_visual_marker
+      Name: TipVisualMarkers
+      Namespaces:
+        actual_tip: true
+        target_tip: true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

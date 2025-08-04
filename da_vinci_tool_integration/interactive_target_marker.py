@@ -6,12 +6,23 @@ from geometry_msgs.msg import PoseStamped
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import InteractiveMarker, InteractiveMarkerControl, InteractiveMarkerFeedback
 from interactive_markers.interactive_marker_server import InteractiveMarkerServer
+from std_msgs.msg import Bool  # Add this import at the top
 
 class ToolTargetMarker(Node):
     def __init__(self):
         super().__init__('tool_target_marker')
         self.server = InteractiveMarkerServer(self, "tool_target_marker")
         self.pose_pub = self.create_publisher(PoseStamped, "/tool_target", 10)
+        self.rcm_candidate_pub = self.create_publisher(PoseStamped, "/rcm_candidate_pose", 10)
+
+        # Add RCM mode subscription
+        self.rcm_mode = False
+        self.rcm_mode_sub = self.create_subscription(
+            Bool,
+            "/rcm_mode",
+            self.rcm_mode_callback,
+            10
+        )
 
         # Add IK success feedback subscription and pose validation
         self.success_pose_sub = self.create_subscription(
@@ -127,13 +138,24 @@ class ToolTargetMarker(Node):
             self.validation_timer.cancel()
             self.validation_timer = None
 
+    def rcm_mode_callback(self, msg):
+        self.rcm_mode = msg.data
+        self.get_logger().info(f"RCM mode updated: {self.rcm_mode}")
+
     def feedback_callback(self, feedback):
         if feedback.event_type == InteractiveMarkerFeedback.POSE_UPDATE:
-            # Publish the new pose to IK solver
+            # Always publish to RCM candidate topic (for planning)
             pose = PoseStamped()
             pose.header.frame_id = "lbr_link_0"
             pose.header.stamp = self.get_clock().now().to_msg()
             pose.pose = feedback.pose
+            self.rcm_candidate_pub.publish(pose)
+            
+            if self.rcm_mode:
+                self.get_logger().info("🔒 RCM mode is active — marker input ignored.")
+                return  # Don't send pose to robot
+            
+            # Publish the new pose to IK solver
             self.pose_pub.publish(pose)
             
             # Start validation timer - if no success response comes back, reset pose

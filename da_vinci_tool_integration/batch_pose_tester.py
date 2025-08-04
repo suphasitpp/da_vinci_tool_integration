@@ -38,54 +38,25 @@ class BatchPoseTester(Node):
         self.get_logger().info(f"✅ BatchPoseTester initialized with {len(self.poses_df)} poses.")
 
     def _load_poses(self):
-        """Load poses from Excel file with error handling"""
-        try:
-            # Try to load from the current working directory first
-            current_dir = os.getcwd()
-            source_dir = os.path.join(current_dir, 'src', 'da_vinci_tool_integration', 'da_vinci_tool_integration')
-            self.get_logger().info(f"🔍 Looking for rounded_poses.xlsx in: {source_dir}")
-            
-            # Only try to load rounded_poses.xlsx
-            excel_path = os.path.join(source_dir, 'rounded_poses.xlsx')
-            self.get_logger().info(f"🔍 Checking for file: {excel_path}")
-            if os.path.exists(excel_path):
-                self.poses_df = pd.read_excel(excel_path)
-                self.get_logger().info(f"✅ Loaded {len(self.poses_df)} poses from {excel_path}")
-            else:
-                # If file doesn't exist, create sample poses for testing
-                self.get_logger().warning(f"⚠️ rounded_poses.xlsx not found. Creating sample poses...")
-                self._create_sample_poses()
-                
-        except Exception as e:
-            self.get_logger().error(f"❌ Error loading poses: {e}")
-            self.get_logger().info("Creating sample poses for testing...")
-            self._create_sample_poses()
+        """Load poses from Excel file"""
+        # Try to load from the current working directory first
+        current_dir = os.getcwd()
+        source_dir = os.path.join(current_dir, 'src', 'da_vinci_tool_integration', 'da_vinci_tool_integration')
+        self.get_logger().info(f"🔍 Looking for rounded_poses.xlsx in: {source_dir}")
+        
+        # Only try to load rounded_poses.xlsx
+        excel_path = os.path.join(source_dir, 'rounded_poses.xlsx')
+        self.get_logger().info(f"🔍 Checking for file: {excel_path}")
+        
+        if os.path.exists(excel_path):
+            self.poses_df = pd.read_excel(excel_path)
+            self.get_logger().info(f"✅ Loaded {len(self.poses_df)} poses from {excel_path}")
+        else:
+            self.get_logger().error(f"❌ File not found: {excel_path}")
+            self.get_logger().error("Please ensure rounded_poses.xlsx exists in the package directory.")
+            raise FileNotFoundError(f"rounded_poses.xlsx not found at {excel_path}")
 
-    def _create_sample_poses(self):
-        """Create sample poses for testing when Excel file is not available"""
-        np.random.seed(42)  # For reproducible results
-        
-        # Create 20 sample poses in a reasonable workspace range
-        poses_data = []
-        for i in range(20):
-            # Generate poses in a reasonable workspace
-            x = np.random.uniform(0.6, 0.9)  # Forward/backward
-            y = np.random.uniform(-0.5, 0.5)  # Left/right
-            z = np.random.uniform(0.6, 0.9)  # Up/down
-            
-            # Generate random quaternion (normalized)
-            qx, qy, qz, qw = np.random.randn(4)
-            q_norm = np.sqrt(qx**2 + qy**2 + qz**2 + qw**2)
-            qx, qy, qz, qw = qx/q_norm, qy/q_norm, qz/q_norm, qw/q_norm
-            
-            poses_data.append({
-                'Pose': i + 1,
-                'x': x, 'y': y, 'z': z,
-                'qx': qx, 'qy': qy, 'qz': qz, 'qw': qw
-            })
-        
-        self.poses_df = pd.DataFrame(poses_data)
-        self.get_logger().info(f"✅ Created {len(self.poses_df)} sample poses")
+
 
     def process(self):
         """Main processing loop"""
@@ -202,31 +173,18 @@ class BatchPoseTester(Node):
             })
 
     def save_results(self):
-        """Save results to Excel file"""
+        """Save results to Excel file with timestamp"""
         try:
-            df = pd.DataFrame(self.results)
-            
-            # Save to current directory by default
-            output_path = 'ik_error_results.xlsx'
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_path = f'ik_error_results_{timestamp}.xlsx'
             self.get_logger().info(f"💾 Saving results to: {output_path}")
             
+            df = pd.DataFrame(self.results)
             df.to_excel(output_path, index=False)
             self.get_logger().info(f"✅ Results saved successfully to {output_path}")
             
-            # Print summary statistics
-            if len(self.results) > 0:
-                pos_errors = [r["Position Error (mm)"] for r in self.results if not np.isnan(r["Position Error (mm)"])]
-                rot_errors = [r["Orientation Error (deg)"] for r in self.results if not np.isnan(r["Orientation Error (deg)"])]
-                
-                if pos_errors:
-                    self.get_logger().info(f"📊 Position Error Stats: Mean={np.mean(pos_errors):.4f}mm, "
-                                         f"Std={np.std(pos_errors):.4f}mm, Max={np.max(pos_errors):.4f}mm")
-                if rot_errors:
-                    self.get_logger().info(f"📊 Orientation Error Stats: Mean={np.mean(rot_errors):.4f}°, "
-                                         f"Std={np.std(rot_errors):.4f}°, Max={np.max(rot_errors):.4f}°")
-                
-                success_rate = len([r for r in self.results if not np.isnan(r["Position Error (mm)"])]) / len(self.results) * 100
-                self.get_logger().info(f"📈 Success Rate: {success_rate:.1f}%")
+
                 
         except Exception as e:
             self.get_logger().error(f"❌ Error saving results: {e}")

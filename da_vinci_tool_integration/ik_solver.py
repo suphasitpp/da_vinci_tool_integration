@@ -95,8 +95,8 @@ class IKSolver(Node):
                 success_pose.header.stamp = self.get_clock().now().to_msg()
                 success_pose.pose = self.current_target_pose.pose
                 self.success_pose_pub.publish(success_pose)
-                   self.get_logger().info(f"Published success to /ik_success_pose: ({success_pose.pose.position.x:.3f}, {success_pose.pose.position.y:.3f}, {success_pose.pose.position.z:.3f})")
-         else:
+                self.get_logger().info(f"Published success to /ik_success_pose: ({success_pose.pose.position.x:.3f}, {success_pose.pose.position.y:.3f}, {success_pose.pose.position.z:.3f})")
+            else:
                 self.get_logger().warn("current_target_pose not found - cannot publish success feedback")
             
             self.get_logger().info(f"Published joint state with {len(filtered.name)} joints.")

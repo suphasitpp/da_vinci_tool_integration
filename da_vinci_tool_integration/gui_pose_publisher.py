@@ -59,6 +59,9 @@ class PosePublisherGUI(Node):
         self.rcm_point = None
         self.last_z_axis = np.array([0, 0, 1])  # Fallback shaft direction for RCM alignment
         
+        # RCM alignment tolerance for stability
+        self.RCM_ALIGNMENT_TOLERANCE = 0.002  # 2mm alignment tolerance
+        
         # GUI Setup
         self.root = tk.Tk()
         self.root.title("RCM Tool Control")
@@ -192,6 +195,10 @@ class PosePublisherGUI(Node):
             self.rcm_mode = True
             if self.capture_tool_tip_pose():
                 self.get_logger().info("✅ RCM point set and tool tip pose captured")
+
+                # 🚀 Publish markers so actual and target poses are immediately visible and aligned
+                self.publish_target_pose_frame(self.virtual_tip_pos, self.virtual_tip_rot, ik_failed=False)
+                self.publish_actual_pose_frame()
             else:
                 self.get_logger().warn("⚠️ RCM point set but failed to capture tool tip pose")
             
@@ -241,57 +248,102 @@ class PosePublisherGUI(Node):
             self.rcm_point.position.z
         ])
 
+    def snap_back_to_actual_tip(self):
+        """Revert virtual tip to current actual tip from TF"""
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                'lbr_link_0', 'PSM_tool_virtual_tip', rclpy.time.Time()
+            )
+            pos = transform.transform.translation
+            ori = transform.transform.rotation
+            self.virtual_tip_pos = np.array([pos.x, pos.y, pos.z])
+            quat = [ori.x, ori.y, ori.z, ori.w]
+            self.virtual_tip_rot = R.from_quat(quat).as_matrix()
+            self.last_z_axis = self.virtual_tip_rot[:, 2]
+
+            self.get_logger().warn("🔄 IK failed — snapped back to actual tip pose.")
+            
+            # Publish fallback marker to show red failure
+            self.publish_target_pose_frame(self.virtual_tip_pos, self.virtual_tip_rot, ik_failed=True)
+        except Exception as e:
+            self.get_logger().error(f"❌ Snap-back failed: {e}")
+
+    def verify_ik_reached(self, target_pos):
+        """Check if robot reached the target tip position, using RCM alignment tolerance instead of distance"""
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                'lbr_link_0', 'PSM_tool_virtual_tip', rclpy.time.Time()
+            )
+            pos = transform.transform.translation
+            actual = np.array([pos.x, pos.y, pos.z])
+
+            # Compute Z-axis (shaft direction) from published orientation
+            ori = transform.transform.rotation
+            quat = [ori.x, ori.y, ori.z, ori.w]
+            rot_matrix = R.from_quat(quat).as_matrix()
+            z_axis = rot_matrix[:, 2]
+
+            # Check alignment error using perpendicular distance
+            rcm_vec = self.rcm_point_vec()
+            shaft_error = np.linalg.norm(np.cross(rcm_vec - actual, z_axis))
+
+            if shaft_error > self.RCM_ALIGNMENT_TOLERANCE:
+                self.get_logger().warn(
+                    f"⚠️ IK reached pose, but shaft alignment error is {shaft_error*1000:.2f} mm — exceeds RCM tolerance"
+                )
+                # Optionally: show red marker but do NOT snap back
+                self.publish_target_pose_frame(actual, rot_matrix, ik_failed=True)
+            else:
+                self.get_logger().debug("✅ Shaft alignment verified — IK success.")
+
+        except Exception as e:
+            self.get_logger().warn(f"⚠️ IK verification failed: {e}")
+
     def apply_rcm_motion(self, dx, dy, dz):
         """Apply a joystick-driven offset to the tool tip with RCM constraint."""
         if not self.rcm_mode or self.rcm_point is None:
             self.get_logger().warn("RCM motion skipped: RCM mode not active or point not set.")
             return
 
-        # Check if virtual tip is initialized
         if self.virtual_tip_pos is None or self.virtual_tip_rot is None:
             self.get_logger().warn("Virtual tip not initialized - please set RCM first.")
             return
 
-        # Filter small joystick input (deadzone)
+        # Deadzone filtering
         def clip(val): return 0.0 if abs(val) < 1e-4 else val
-        dx = clip(dx)
-        dy = clip(dy)
-        dz = clip(dz)
+        dx, dy, dz = clip(dx), clip(dy), clip(dz)
 
-        # Build local tool frame (X/Y/Z axes)
+        # Use current tool frame
         x_axis = self.virtual_tip_rot[:, 0]
         y_axis = self.virtual_tip_rot[:, 1]
         z_axis = self.virtual_tip_rot[:, 2]
 
-        # Apply local offset to tip
+        # Apply offset in local frame
         tip_pos = self.virtual_tip_pos + dx * x_axis + dy * y_axis + dz * z_axis
 
-        # Reuse cached orientation if no motion
         if dx == 0.0 and dy == 0.0 and dz == 0.0:
             rot_matrix = self.virtual_tip_rot
             quat = R.from_matrix(rot_matrix).as_quat()
         else:
-            # Compute new Z-axis (shaft direction) pointing to RCM
-            rcm_vec = np.array([
-                self.rcm_point.position.x,
-                self.rcm_point.position.y,
-                self.rcm_point.position.z
-            ])
-            shaft_vec = rcm_vec - tip_pos
+            # Step 1: compute new shaft direction
+            rcm_vec = self.rcm_point_vec()
+            z_axis = normalize(tip_pos - rcm_vec)
 
-            if np.linalg.norm(shaft_vec) < 1e-4:
-                z_axis = self.last_z_axis
-            else:
-                z_axis = normalize(shaft_vec)
-                self.last_z_axis = z_axis
+            # Step 2: reproject original X to maintain orientation
+            x_original = self.virtual_tip_rot[:, 0]
+            x_axis = x_original - np.dot(x_original, z_axis) * z_axis
+            x_axis = normalize(x_axis)
+            y_axis = np.cross(z_axis, x_axis)
 
-            # Compute orthogonal axes
-            up = np.array([0, 0, 1]) if abs(np.dot(z_axis, [0, 0, 1])) < 0.95 else np.array([0, 1, 0])
-            x_axis_new = normalize(np.cross(up, z_axis))
-            y_axis_new = np.cross(z_axis, x_axis_new)
-
-            rot_matrix = np.column_stack((x_axis_new, y_axis_new, z_axis))
+            rot_matrix = np.column_stack((x_axis, y_axis, z_axis))
             quat = R.from_matrix(rot_matrix).as_quat()
+
+            # Optional: alignment check
+            alignment_error = np.linalg.norm(np.cross(rcm_vec - tip_pos, z_axis))
+            if alignment_error > self.RCM_ALIGNMENT_TOLERANCE:
+                self.get_logger().warn(f"⚠️ Shaft misaligned by {alignment_error*1000:.2f} mm")
+            else:
+                self.get_logger().debug(f"✅ Shaft alignment OK: {alignment_error*1000:.2f} mm")
 
         # Publish pose
         pose = PoseStamped()
@@ -306,13 +358,16 @@ class PosePublisherGUI(Node):
         pose.pose.orientation.w = quat[3]
         self.publisher_.publish(pose)
 
-        # Update virtual tip state
+        # Update state
         self.virtual_tip_pos = tip_pos
         self.virtual_tip_rot = rot_matrix
 
-        # Publish debug marker
-        self.publish_target_pose_frame(tip_pos, rot_matrix, False)
+        # RViz debug markers
+        self.publish_target_pose_frame(tip_pos, rot_matrix, ik_failed=False)
         self.publish_actual_pose_frame()
+
+        # IK check (delayed)
+        self.root.after(200, lambda: self.verify_ik_reached(tip_pos))
 
         self.get_logger().info(
             f"🎯 RCM Motion: dx={dx:.4f}, dy={dy:.4f}, dz={dz:.4f} → "

@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation as R
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped, Vector3, Point
+from geometry_msgs.msg import PoseStamped, Vector3
 from std_msgs.msg import Bool
 import tf2_ros
 from geometry_msgs.msg import TransformStamped
@@ -47,9 +47,6 @@ class PosePublisherGUI(Node):
         self.virtual_tip_pos = None
         self.virtual_tip_rot = None
         
-        # Pose tracking (snap back functionality removed)
-        self.last_published_pose = None
-        
         # TF2 Buffer and Listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -57,7 +54,6 @@ class PosePublisherGUI(Node):
         # RCM state
         self.rcm_mode = False
         self.rcm_point = None
-        self.last_z_axis = np.array([0, 0, 1])  # Fallback shaft direction for RCM alignment
         
         # RCM alignment tolerance for stability
         self.RCM_ALIGNMENT_TOLERANCE = 0.002  # 2mm alignment tolerance
@@ -70,61 +66,30 @@ class PosePublisherGUI(Node):
         self.frame = ttk.Frame(self.root, padding="10")
         self.frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # Tool frame offset controls
-        ttk.Label(self.frame, text="Tool Frame Offsets:", font=('Arial', 12, 'bold')).grid(row=0, column=0, columnspan=3, pady=(0, 10))
-
-        self.entries = {}
-        self.sliders = {}
-        
-        for i, axis in enumerate(['x', 'y', 'z']):
-            # Label
-            ttk.Label(self.frame, text=f"{axis.upper()} Offset:").grid(row=i+1, column=0, padx=5, pady=5, sticky=tk.W)
-            
-            # Entry field
-            entry = ttk.Entry(self.frame, width=10)
-            entry.insert(0, "0.000")
-            entry.grid(row=i+1, column=1, padx=5, pady=5)
-            self.entries[axis] = entry
-
-            # Slider
-            slider = tk.Scale(self.frame, from_=-0.10, to=0.10, resolution=0.001, 
-                             orient=tk.HORIZONTAL, length=150,
-                             command=lambda val, ax=axis: self.update_entry_from_slider(ax, val))
-            slider.set(0.0)
-            slider.grid(row=i+1, column=2, padx=5, pady=5)
-            self.sliders[axis] = slider
-
         # Buttons
-        self.send_button = ttk.Button(self.frame, text="🚀 Send RCM-Constrained Pose", 
-                                     command=self.send_rcm_pose)
-        self.send_button.grid(row=4, column=0, columnspan=3, pady=10)
-
         self.set_rcm_button = ttk.Button(self.frame, text="📍 Set RCM Point", 
                                         command=self.set_rcm_point)
-        self.set_rcm_button.grid(row=5, column=0, columnspan=3, pady=5)
+        self.set_rcm_button.grid(row=0, column=0, columnspan=3, pady=5)
 
         self.toggle_button = ttk.Button(self.frame, text="🔄 Toggle RCM Mode", 
                                        command=self.toggle_rcm_mode)
-        self.toggle_button.grid(row=6, column=0, columnspan=3, pady=5)
+        self.toggle_button.grid(row=1, column=0, columnspan=3, pady=5)
 
         # Status display
         self.status_label = ttk.Label(self.frame, text="RCM Mode: OFF", foreground="red", 
                                      font=('Arial', 10, 'bold'))
-        self.status_label.grid(row=7, column=0, columnspan=3, pady=10)
+        self.status_label.grid(row=2, column=0, columnspan=3, pady=10)
 
         # RCM point info
         self.rcm_info_label = ttk.Label(self.frame, text="RCM Point: Not Set", 
                                        foreground="gray")
-        self.rcm_info_label.grid(row=8, column=0, columnspan=3, pady=5)
+        self.rcm_info_label.grid(row=3, column=0, columnspan=3, pady=5)
         
         # PS5 Input display
         self.nudge_label = ttk.Label(self.frame, text="🎮 PS5 Input: X=0.000 Y=0.000 Z=0.000", 
                                     foreground="gray")
-        self.nudge_label.grid(row=9, column=0, columnspan=3, pady=5)
+        self.nudge_label.grid(row=4, column=0, columnspan=3, pady=5)
         
-        # Pose tracking
-        self.last_pose_time = None
-
     def rcm_mode_callback(self, msg):
         """Handle external RCM mode changes"""
         self.rcm_mode = msg.data
@@ -144,11 +109,6 @@ class PosePublisherGUI(Node):
             f"📍 RCM candidate updated: ({self.rcm_point.position.x:.3f}, "
             f"{self.rcm_point.position.y:.3f}, {self.rcm_point.position.z:.3f})"
         )
-
-    def update_entry_from_slider(self, axis, val):
-        """Update entry field when slider changes"""
-        self.entries[axis].delete(0, tk.END)
-        self.entries[axis].insert(0, f"{float(val):.3f}")
 
     def update_status_display(self):
         """Update GUI status labels"""
@@ -247,26 +207,6 @@ class PosePublisherGUI(Node):
             self.rcm_point.position.y,
             self.rcm_point.position.z
         ])
-
-    def snap_back_to_actual_tip(self):
-        """Revert virtual tip to current actual tip from TF"""
-        try:
-            transform = self.tf_buffer.lookup_transform(
-                'lbr_link_0', 'PSM_tool_virtual_tip', rclpy.time.Time()
-            )
-            pos = transform.transform.translation
-            ori = transform.transform.rotation
-            self.virtual_tip_pos = np.array([pos.x, pos.y, pos.z])
-            quat = [ori.x, ori.y, ori.z, ori.w]
-            self.virtual_tip_rot = R.from_quat(quat).as_matrix()
-            self.last_z_axis = self.virtual_tip_rot[:, 2]
-
-            self.get_logger().warn("🔄 IK failed — snapped back to actual tip pose.")
-            
-            # Publish fallback marker to show red failure
-            self.publish_target_pose_frame(self.virtual_tip_pos, self.virtual_tip_rot, ik_failed=True)
-        except Exception as e:
-            self.get_logger().error(f"❌ Snap-back failed: {e}")
 
     def verify_ik_reached(self, target_pos):
         """Check if robot reached the target tip position, using RCM alignment tolerance instead of distance"""
@@ -521,101 +461,6 @@ class PosePublisherGUI(Node):
             self.tool_tip_position = None
             self.tool_tip_orientation = None
             return False
-
-    def send_rcm_pose(self):
-        """Send RCM-constrained pose with GUI offsets"""
-        
-        # 🔐 Safety checks
-        if not self.rcm_mode:
-            self.get_logger().warn("❗ RCM Mode is OFF. Cannot send pose.")
-            return
-
-        if self.rcm_point is None:
-            self.get_logger().error("❌ No RCM point available. Please set RCM first.")
-            return
-
-        # ✅ CAPTURE EXACT TOOL TIP POSE when RCM is set
-        if not self.capture_tool_tip_pose():
-            self.get_logger().error("❌ Failed to capture tool tip pose")
-            return
-
-        # ✅ PUBLISH EXACT POSE to /tool_target so target matches actual tip
-        exact_pose = PoseStamped()
-        exact_pose.header.frame_id = "lbr_link_0"
-        exact_pose.header.stamp = self.get_clock().now().to_msg()
-        exact_pose.pose.position.x = self.tool_tip_position[0]
-        exact_pose.pose.position.y = self.tool_tip_position[1]
-        exact_pose.pose.position.z = self.tool_tip_position[2]
-        exact_pose.pose.orientation.x = self.tool_tip_orientation[0]
-        exact_pose.pose.orientation.y = self.tool_tip_orientation[1]
-        exact_pose.pose.orientation.z = self.tool_tip_orientation[2]
-        exact_pose.pose.orientation.w = self.tool_tip_orientation[3]
-        
-        self.publisher_.publish(exact_pose)
-        self.get_logger().info("✅ Published exact tool tip pose to align target with actual tip")
-
-        # Get tool frame offsets from GUI
-        try:
-            x_offset = float(self.entries['x'].get())
-            y_offset = float(self.entries['y'].get())
-            z_offset = float(self.entries['z'].get())
-        except ValueError:
-            self.get_logger().error("❌ Invalid input. Please use numeric values for offsets.")
-            return
-
-        # Get RCM in base frame
-        rcm_pos = self.rcm_point_vec()
-
-        try:
-            # Use exact captured position and orientation
-            tip_origin = self.tool_tip_position.copy()
-            quat = self.tool_tip_orientation.copy()
-            rot = R.from_quat(quat)
-            rot_matrix = rot.as_matrix()
-
-            # Local frame axes from captured tool orientation
-            z_axis = rot_matrix[:, 2]  # tool shaft direction
-            x_axis = rot_matrix[:, 0]
-            y_axis = rot_matrix[:, 1]
-
-            # Apply offset in tool's local frame
-            tip_pos = tip_origin + x_offset * x_axis + y_offset * y_axis + z_offset * z_axis
-
-            # Recalculate Z-axis to point from tip to RCM (RCM constraint)
-            new_z_axis = normalize(rcm_pos - tip_pos)
-
-            # Recompute X and Y axes
-            if abs(np.dot(new_z_axis, [0, 0, 1])) > 0.95:
-                up = np.array([0, 1, 0])
-            else:
-                up = np.array([0, 0, 1])
-            new_x_axis = normalize(np.cross(up, new_z_axis))
-            new_y_axis = np.cross(new_z_axis, new_x_axis)
-
-            # Final orientation
-            rot_matrix = np.column_stack((new_x_axis, new_y_axis, new_z_axis))
-            quat = R.from_matrix(rot_matrix).as_quat()
-
-        except Exception as e:
-            self.get_logger().error(f"❌ Failed to compute tool pose: {e}")
-            return
-
-        # 📡 Publish Pose
-        pose_msg = PoseStamped()
-        pose_msg.header.frame_id = "lbr_link_0"
-        pose_msg.header.stamp = self.get_clock().now().to_msg()
-        pose_msg.pose.position.x = tip_pos[0]
-        pose_msg.pose.position.y = tip_pos[1]
-        pose_msg.pose.position.z = tip_pos[2]
-        pose_msg.pose.orientation.x = quat[0]
-        pose_msg.pose.orientation.y = quat[1]
-        pose_msg.pose.orientation.z = quat[2]
-        pose_msg.pose.orientation.w = quat[3]
-
-        self.publisher_.publish(pose_msg)
-
-        self.get_logger().info(f"✅ Sent RCM-constrained pose with offsets: x={x_offset:.3f}, y={y_offset:.3f}, z={z_offset:.3f}")
-        self.get_logger().info(f"📍 Tip position: ({tip_pos[0]:.3f}, {tip_pos[1]:.3f}, {tip_pos[2]:.3f}) | RCM: ({rcm_pos[0]:.3f}, {rcm_pos[1]:.3f}, {rcm_pos[2]:.3f})")
 
     def spin_ros(self):
         """Non-blocking ROS spinning"""

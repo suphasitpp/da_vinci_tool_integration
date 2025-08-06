@@ -13,6 +13,9 @@ setup(
         # Install all launch files
         ('share/' + package_name + '/launch', [
             'launch/med7_combined_simple.launch.py',
+            'launch/launchpad_no_rcm.launch.py',
+            'launch/interactive_marker_only.launch.py',
+            'launch/rcm_command_center.launch.py',
         ]),
         # Install all urdf files
         ('share/' + package_name + '/urdf', [

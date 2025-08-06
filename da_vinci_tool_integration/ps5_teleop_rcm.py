@@ -30,13 +30,13 @@ class PS5TeleopRCM(Node):
 
     def joy_callback(self, msg):
         # PS5 mapping (corrected):
-        # axes[0] = Left stick X (left/right)
-        # axes[1] = Left stick Y (up/down, inverted)
+        # axes[1] = Left stick X (left/right)
+        # axes[0] = Left stick Y (up/down, inverted)
         # axes[2] = L2 (1.0 unpressed → -1.0 fully pressed)
         # axes[5] = R2 (1.0 unpressed → -1.0 fully pressed)
 
-        lx = msg.axes[0]
-        ly = msg.axes[1]
+        lx = -msg.axes[1]
+        ly = -msg.axes[0]
         l2 = msg.axes[2]  # L2 is axes[2]
         r2 = msg.axes[5]  # R2 is axes[5]
 

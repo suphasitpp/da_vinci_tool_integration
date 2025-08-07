@@ -56,4 +56,5 @@ setup(
                            'ps5_teleop_rcm = da_vinci_tool_integration.ps5_teleop_rcm:main',
                        ],
         },
+        },
 )

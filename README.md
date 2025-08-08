@@ -1,17 +1,17 @@
 # da_vinci_tool_integration
 
-This ROS 2 package provides a combined robot description and launch setup for the KUKA LBR Med7 arm with a da Vinci PSM tool and adaptor. It works in conjunction with the `moveit_config` package to provide complete motion planning and kinematic solving capabilities for surgical robotics applications.
+This ROS 2 package provides surgical robotics simulation combining KUKA LBR Med7 arm with da Vinci PSM tools. Includes kinematic solvers, RCM management, and surgical workspace visualization.
 
 ---
 
 ## Features
 
-- Combines LBR Med7, da Vinci PSM, and adaptor into a single robot model
-- All adaptor URDF and mesh files are included locally (no external adaptor package needed)
-- Example launch file for visualization in RViz2
-- Forward and inverse kinematics solvers for motion planning
-- Interactive target marker for intuitive robot control
-- Pre-configured RViz settings for surgical robotics visualization
+- **Robot Integration**: LBR Med7 + da Vinci PSM + custom adaptor
+- **Kinematic Solvers**: Forward/inverse kinematics for motion planning
+- **RCM Management**: Remote Center of Motion constraint handling
+- **Surgical Visualization**: Static surgical box with reference markers
+- **Interactive Control**: Interactive target marker for robot positioning
+- **PS5 Teleoperation**: PlayStation 5 controller support
 
 ---
 
@@ -54,42 +54,38 @@ source install/setup.bash
 
 ---
 
-## Usage Examples
+## Usage Sequence
 
-### Basic Visualization
+### 1. Basic Setup (No RCM)
 ```bash
-# Launch RViz with combined robot model
-ros2 launch da_vinci_tool_integration med7_combined_simple.launch.py
+# Launch MoveIt + IK Solver
+ros2 launch da_vinci_tool_integration launchpad_no_rcm.launch.py
 ```
 
-### Motion Planning with MoveIt
+### 2. Interactive Marker Only
 ```bash
-# Launch complete MoveIt demo with motion planning
-ros2 launch moveit_config demo.launch.py
-
-# Or launch MoveIt move_group server separately
-ros2 launch moveit_config move_group.launch.py
-```
-
-### Kinematic Solvers
-```bash
-# Run forward kinematics solver
-ros2 run da_vinci_tool_integration fk_query.py
-
-# Run inverse kinematics solver  
-ros2 run da_vinci_tool_integration ik_solver.py
-
 # Launch interactive target marker
-ros2 run da_vinci_tool_integration interactive_target_marker.py
+ros2 launch da_vinci_tool_integration interactive_marker_only.launch.py
 ```
 
-### Integrated Workflow
-For complete motion planning and control:
-1. **Launch MoveIt:** `ros2 launch moveit_config demo.launch.py`
-2. **Use kinematic tools:** Run the IK/FK solvers for path validation
-3. **Interactive control:** Use the target marker for intuitive positioning
+### 3. RCM Command Center
+```bash
+# Launch RCM manager + GUI + PS5 teleop
+ros2 launch da_vinci_tool_integration rcm_command_center.launch.py
+```
 
-The packages work together to provide complete surgical robot simulation and motion planning capabilities.
+### 4. Surgical Workspace Test
+```bash
+# Launch static surgical box visualization
+ros2 run da_vinci_tool_integration static_surgical_box.py
+```
+
+### Launch Files
+
+- **`launchpad_no_rcm.launch.py`** - MoveIt + IK Solver (basic setup)
+- **`interactive_marker_only.launch.py`** - Interactive target marker only
+- **`rcm_command_center.launch.py`** - RCM manager + GUI + PS5 teleop
+- **`med7_combined_simple.launch.py`** - Basic robot visualization
 
 ---
 
@@ -100,17 +96,22 @@ This package works as part of a two-package system:
 ### This Package (`da_vinci_tool_integration`)
 - **Robot Description:** URDF files for LBR Med7 + da Vinci PSM + custom adaptor
 - **Kinematic Tools:** Forward/inverse kinematics solvers and interactive markers
-- **Visualization:** Launch files and RViz configurations
+- **Surgical Visualization:** Static surgical box with reference markers
+- **RCM Management:** Remote Center of Motion constraint handling
+- **Launch Files:** Complete setup sequences for different use cases
 
 ### Companion Package (`moveit_config`)
 - **Motion Planning:** MoveIt configuration for path planning and execution
 - **Joint Limits:** Velocity and acceleration constraints
 - **Planning Algorithms:** Optimized for surgical robotics applications
 
-### Python Modules (This Package)
-- **`fk_query.py`** - Forward kinematics solver for end-effector pose calculation
-- **`ik_solver.py`** - Inverse kinematics solver for joint position calculation  
-- **`interactive_target_marker.py`** - Interactive 6DOF marker for target positioning
+### Key Python Modules
+- **`ik_solver.py`** - Inverse kinematics solver
+- **`interactive_target_marker.py`** - Interactive 6DOF marker
+- **`static_surgical_box.py`** - Surgical workspace visualization
+- **`rcm_manager.py`** - RCM constraint handling
+- **`gui_pose_publisher.py`** - GUI pose control
+- **`ps5_teleop_rcm.py`** - PS5 controller teleoperation
 
 ### URDF & Configuration Files (This Package)
 - **`urdf/`** - Robot descriptions including LBR Med7, PSM tool, and custom adaptor
@@ -124,8 +125,10 @@ This package works as part of a two-package system:
 - **Package Integration:** This package provides robot description and kinematic tools, while the companion `moveit_config` package provides motion planning configuration.
 - The adaptor URDF and mesh files are included in `urdf/adaptor/` within this package.
 - You do **not** need to clone or build any separate adaptor package.
-- The `fri` and `lbr_fri_idl` packages are automatically included when using the official LBR stack setup method.
-- **Motion Planning:** For full motion planning capabilities, use both packages together - launch MoveIt from `moveit_config` and use the kinematic tools from this package.
+
+- **Surgical Workspace:** Static surgical box provides configurable workspace with reference markers.
+- **RCM Constraints:** Remote Center of Motion constraints maintain proper surgical entry point alignment.
+- **Launch Sequence:** Use the launch files in sequence for different surgical robotics scenarios.
 - If you encounter build errors related to missing FRI client, ensure you're using the proper setup method above.
 
 ---

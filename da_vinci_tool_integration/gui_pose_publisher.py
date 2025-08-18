@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation as R
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped, Vector3
+from geometry_msgs.msg import PoseStamped, Vector3, Pose
 from std_msgs.msg import Bool
 import tf2_ros
 from geometry_msgs.msg import TransformStamped
@@ -96,19 +96,9 @@ class PosePublisherGUI(Node):
         self.update_status_display()
 
     def rcm_pose_callback(self, msg):
-        """Handle RCM point updates"""
-        # Only accept RCM updates when RCM mode is OFF (before setting RCM)
-        if self.rcm_mode:
-            self.get_logger().debug("🔒 RCM mode is ON - ignoring pose updates (RCM point is locked)")
-            return  # RCM mode is ON — ignore updates to keep RCM point frozen
-            
-        # Only update RCM point, don't capture tool poses yet
-        self.rcm_point = msg.pose
-        self.update_rcm_info()
-        self.get_logger().debug(
-            f"📍 RCM candidate updated: ({self.rcm_point.position.x:.3f}, "
-            f"{self.rcm_point.position.y:.3f}, {self.rcm_point.position.z:.3f})"
-        )
+        """Handle RCM point updates (legacy - now gets from TF)"""
+        # This is kept for backward compatibility but RCM point is now set via TF
+        pass
 
     def update_status_display(self):
         """Update GUI status labels"""
@@ -138,15 +128,38 @@ class PosePublisherGUI(Node):
             self.rcm_info_label.config(text="RCM Point: Not Set", foreground="gray")
 
     def set_rcm_point(self):
-        """Set RCM point from current interactive marker position and enable RCM mode"""
-        # First, send trigger to get current RCM candidate pose
-        msg = Bool()
-        msg.data = True
-        self.rcm_trigger_pub.publish(msg)
-        self.get_logger().info("📡 Sent RCM trigger request")
-        
-        # Wait a moment for the RCM pose to be updated
-        self.root.after(100, self._complete_rcm_setup)
+        """Set RCM point from current tool tip position via TF and enable RCM mode"""
+        try:
+            # Get current tool tip position from TF
+            transform = self.tf_buffer.lookup_transform(
+                "lbr_link_0", 
+                "PSM_tool_virtual_tip", 
+                rclpy.time.Time()
+            )
+            
+            # Set RCM point to current tool position
+            self.rcm_point = Pose()
+            self.rcm_point.position.x = transform.transform.translation.x
+            self.rcm_point.position.y = transform.transform.translation.y
+            self.rcm_point.position.z = transform.transform.translation.z
+            self.rcm_point.orientation.x = transform.transform.rotation.x
+            self.rcm_point.orientation.y = transform.transform.rotation.y
+            self.rcm_point.orientation.z = transform.transform.rotation.z
+            self.rcm_point.orientation.w = transform.transform.rotation.w
+            
+            self.get_logger().info(f"📍 RCM point set from TF: x={self.rcm_point.position.x:.3f}, y={self.rcm_point.position.y:.3f}, z={self.rcm_point.position.z:.3f}")
+            
+            # Send trigger to RCM Manager
+            msg = Bool()
+            msg.data = True
+            self.rcm_trigger_pub.publish(msg)
+            
+            # Complete RCM setup
+            self._complete_rcm_setup()
+            
+        except Exception as e:
+            self.get_logger().error(f"❌ Failed to get RCM point from TF: {e}")
+            self.get_logger().error("Make sure the robot is running and TF is available")
     
     def _complete_rcm_setup(self):
         """Complete RCM setup after pose is captured"""
@@ -464,8 +477,8 @@ class PosePublisherGUI(Node):
 
     def spin_ros(self):
         """Non-blocking ROS spinning"""
-        rclpy.spin_once(self, timeout_sec=0.1)
-        self.root.after(100, self.spin_ros)
+        rclpy.spin_once(self, timeout_sec=0.01)
+        self.root.after(10, self.spin_ros)
 
     def run(self):
         """Start the GUI and ROS spinning"""

@@ -3,6 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import JointState
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import InteractiveMarker, InteractiveMarkerControl, InteractiveMarkerFeedback
 from interactive_markers.interactive_marker_server import InteractiveMarkerServer
@@ -32,30 +33,31 @@ class ToolTargetMarker(Node):
             10
         )
         
+        # Add robot state subscription to get current end-effector pose
+        self.robot_state_sub = self.create_subscription(
+            JointState,
+            "/joint_states",
+            self.robot_state_callback,
+            10
+        )
+        
         # Initialize with a safe default pose
         self.last_valid_pose = None
         self.waiting_for_ik_response = False
         self.validation_timer = None
         self.ik_timeout_duration = 1.0  # seconds to wait for IK response
+        self.marker_initialized = False
 
         self.marker = InteractiveMarker()
         self.marker.header.frame_id = "lbr_link_0"
         self.marker.name = "tool_target"
         self.marker.description = "Tool Target Pose"
         self.marker.scale = 0.2
-        self.marker.pose.position.x = 0.0
-        self.marker.pose.position.y = 0.425
-        self.marker.pose.position.z = 1.386
-        self.marker.pose.orientation.x = -0.5
-        self.marker.pose.orientation.y = 0.5
-        self.marker.pose.orientation.z = 0.5
-        self.marker.pose.orientation.w = 0.5
+        # Pose will be set dynamically based on robot's current position
+        # No hardcoded pose - will be set in robot_state_callback
 
-        # Store initial pose as the first valid pose
-        initial_pose = PoseStamped()
-        initial_pose.header.frame_id = "lbr_link_0"
-        initial_pose.pose = self.marker.pose
-        self.last_valid_pose = initial_pose
+        # Store initial pose as the first valid pose (will be updated when robot state is received)
+        self.last_valid_pose = None
 
         # Add central visual sphere with 3D drag capability
         visual_marker = Marker()
@@ -103,7 +105,52 @@ class ToolTargetMarker(Node):
         # Validate initial pose by publishing it to IK solver
         self._initial_validation_timer = self.create_timer(0.5, self.validate_initial_pose)  # Small delay to ensure services are ready
         
-        self.get_logger().info("Interactive marker ready. Drag the marker in RViz to control tool target.")
+        self.get_logger().info("Interactive marker ready. Waiting for robot state to initialize position...")
+
+    def robot_state_callback(self, msg):
+        """Update marker position based on robot's current end-effector pose"""
+        if self.marker_initialized:
+            return  # Only initialize once
+            
+        # Wait a bit for TF to be available
+        if not hasattr(self, '_tf_buffer'):
+            from tf2_ros import Buffer, TransformListener
+            self._tf_buffer = Buffer()
+            self._tf_listener = TransformListener(self._tf_buffer, self)
+            return
+            
+        try:
+            # Get the current end-effector pose using TF
+            transform = self._tf_buffer.lookup_transform(
+                "lbr_link_0", 
+                "PSM_tool_virtual_tip", 
+                rclpy.time.Time()
+            )
+            
+            # Update marker pose to match robot's current end-effector position
+            self.marker.pose.position.x = transform.transform.translation.x
+            self.marker.pose.position.y = transform.transform.translation.y
+            self.marker.pose.position.z = transform.transform.translation.z
+            self.marker.pose.orientation.x = transform.transform.rotation.x
+            self.marker.pose.orientation.y = transform.transform.rotation.y
+            self.marker.pose.orientation.z = transform.transform.rotation.z
+            self.marker.pose.orientation.w = transform.transform.rotation.w
+            
+            # Update the marker on the server
+            self.server.setPose(self.marker.name, self.marker.pose)
+            self.server.applyChanges()
+            
+            # Update last valid pose
+            self.last_valid_pose = PoseStamped()
+            self.last_valid_pose.header.frame_id = "lbr_link_0"
+            self.last_valid_pose.pose = self.marker.pose
+            
+            self.marker_initialized = True
+            self.get_logger().info(f"Marker initialized at robot position: x={self.marker.pose.position.x:.3f}, y={self.marker.pose.position.y:.3f}, z={self.marker.pose.position.z:.3f}")
+            
+        except Exception as e:
+            # Don't spam the logs, just wait for TF to be ready
+            pass
 
     def validate_initial_pose(self):
         """Validate initial pose by sending it to IK solver"""

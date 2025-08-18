@@ -6,6 +6,7 @@ from geometry_msgs.msg import PoseStamped
 from moveit_msgs.srv import GetPositionIK
 from sensor_msgs.msg import JointState
 from moveit_msgs.msg import MoveItErrorCodes
+from std_msgs.msg import Float64MultiArray
 
 VALID_JOINTS = [
     "lbr_A1", "lbr_A2", "lbr_A3", "lbr_A4", "lbr_A5", "lbr_A6", "lbr_A7",
@@ -52,11 +53,39 @@ class IKSolver(Node):
             10
         )
 
+        # Subscribe to robot joint states for initial sync only
+        self.robot_joint_sub = self.create_subscription(
+            JointState,
+            "/lbr/joint_states",  # from mock robot
+            self.robot_joint_callback,
+            10
+        )
+        self.robot_synced = False  # Track if we've synced with robot
+
+        # Keep existing JointState publisher
         self.js_pub = self.create_publisher(JointState, "/joint_states", 10)
+        
+        # Add Float64MultiArray publisher for robot control
+        self.robot_cmd_pub = self.create_publisher(
+            Float64MultiArray,
+            "/lbr/forward_position_controller/commands",
+            10
+        )
+        
+        # Add Float64MultiArray publisher for PSM tool control (Arduino)
+        self.psm_cmd_pub = self.create_publisher(
+            Float64MultiArray,
+            "/psm/position_controller/commands",  # Adjust topic name as needed
+            10
+        )
+        
         self.success_pose_pub = self.create_publisher(PoseStamped, "/ik_success_pose", 10)
 
-        self.create_timer(0.1, self.republish_joint_state)  # 10 Hz is sufficient
-        self.get_logger().info("IK Solver ready. Listening on /tool_target and /psm_joint_states")
+        # Use higher rate for smoother robot control
+        self.declare_parameter('publish_rate', 50.0)
+        self.publish_rate = self.get_parameter('publish_rate').value
+        self.create_timer(1.0 / self.publish_rate, self.republish_joint_state)
+        self.get_logger().info("IK Solver ready. Listening on /tool_target, /psm_joint_states, and /lbr/joint_states")
 
     def pose_callback(self, pose_msg):
         req = GetPositionIK.Request()
@@ -90,6 +119,21 @@ class IKSolver(Node):
         except Exception as e:
             self.get_logger().error(f"Error processing tool joints: {e}")
 
+    def robot_joint_callback(self, msg):
+        """Update arm joints from robot's current state (initial sync only)"""
+        if self.robot_synced:
+            return  # Skip if already synced
+            
+        try:
+            for name, pos in zip(msg.name, msg.position):
+                if name in VALID_JOINTS and name.startswith("lbr_"):
+                    self.last_joint_state[name] = pos
+            
+            self.robot_synced = True
+            self.get_logger().info(f"Initial robot sync complete: {dict(zip(msg.name, msg.position))}")
+        except Exception as e:
+            self.get_logger().error(f"Error processing robot joint states: {e}")
+
     def handle_ik_response(self, future):
         try:
             res = future.result()
@@ -122,22 +166,44 @@ class IKSolver(Node):
                 success_pose.pose = self.current_target_pose.pose
                 self.success_pose_pub.publish(success_pose)
 
+            # Publish joint state immediately after successful IK
+            self._publish_joint_state_now()
+
         except Exception as e:
             self.get_logger().error(f"IK service call failed: {e}")
 
-    def republish_joint_state(self):
-        """Publish combined joint state (arm from IK + tool from PS5)"""
+    def _publish_joint_state_now(self):
+        """Helper function to publish joint state immediately"""
         if not self.last_joint_state:
             return
-
+            
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.last_joint_state.keys())
         msg.position = [self.last_joint_state[n] for n in msg.name]
-        
-
-        
         self.js_pub.publish(msg)
+
+    def republish_joint_state(self):
+        """Publish combined joint state (arm from IK + tool from PS5) and robot commands"""
+        if not self.last_joint_state:
+            return
+
+        # Publish JointState (existing functionality)
+        self._publish_joint_state_now()
+
+        # Publish Float64MultiArray for robot control
+        robot_joint_names = ["lbr_A1", "lbr_A2", "lbr_A3", "lbr_A4", "lbr_A5", "lbr_A6", "lbr_A7"]
+        robot_positions = []
+        
+        for joint_name in robot_joint_names:
+            if joint_name in self.last_joint_state:
+                robot_positions.append(self.last_joint_state[joint_name])
+            else:
+                robot_positions.append(0.0)  # Default if missing
+        
+        cmd_msg = Float64MultiArray()
+        cmd_msg.data = robot_positions
+        self.robot_cmd_pub.publish(cmd_msg)
 
 
 def main(args=None):

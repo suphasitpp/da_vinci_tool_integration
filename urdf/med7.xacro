@@ -11,7 +11,7 @@
     <xacro:arg name="system_config_path" default="$(find lbr_description)/ros2_control/lbr_system_config.yaml" />
     <xacro:arg name="tool" default="sca"/>
     <xacro:arg name="parent_link" default="lbr_link_ee"/>
-    <xacro:arg name="tilt_angle" default="-1.0" /> <!-- Tilt angle in radians (about -57 degrees forward) -->
+    <xacro:arg name="tilt_angle" default="0.0" /> <!-- No tilt - robot stands upright -->
 
     <!-- KDL requires a link without inertia / Gazebo requires a connection to world link or robot
     will tipple https://github.com/lbr-stack/lbr_fri_ros2_stack/issues/230 -->

@@ -127,33 +127,33 @@ class StaticSurgicalBox(Node):
         self.get_logger().info("🟢 Published 4 green corner dots")
 
         # 5 Yellow dots in the middle of the box
-        center_x = -0.2  # box center x
-        center_y = 0.85  # box center y
-        center_z = 0.4   # box center z
-        radius = 0.03    # 3cm radius circle (smaller than before)
-        num_dots = 5     # Only 5 dots
+        #center_x = -0.2  # box center x
+        #center_y = 0.85  # box center y
+        #center_z = 0.4   # box center z
+        #radius = 0.03    # 3cm radius circle (smaller than before)
+        #num_dots = 5     # Only 5 dots
         
-        for i in range(num_dots):
-            angle = 2 * math.pi * i / num_dots
-            dot_x = center_x + radius * math.cos(angle)
-            dot_y = center_y + radius * math.sin(angle)
+        #for i in range(num_dots):
+        #    angle = 2 * math.pi * i / num_dots
+        #    dot_x = center_x + radius * math.cos(angle)
+        #    dot_y = center_y + radius * math.sin(angle)
             
-            yellow_dot = Marker()
-            yellow_dot.header.frame_id = 'world'
-            yellow_dot.header.stamp = now
-            yellow_dot.ns = 'surgical_box'
-            yellow_dot.id = 6 + i  # Start from ID 6
-            yellow_dot.type = Marker.SPHERE
-            yellow_dot.action = Marker.ADD
-            yellow_dot.pose.position.x = dot_x
-            yellow_dot.pose.position.y = dot_y
-            yellow_dot.pose.position.z = center_z
-            yellow_dot.pose.orientation = Quaternion(w=1.0)
-            yellow_dot.scale = Vector3(x=0.01, y=0.01, z=0.01)  # 1cm sphere
-            yellow_dot.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)  # solid yellow
-            yellow_dot.lifetime.sec = 0
-            self.marker_pub.publish(yellow_dot)
-        self.get_logger().info("🟡 Published 5 yellow dots")
+        #    yellow_dot = Marker()
+        #    yellow_dot.header.frame_id = 'world'
+        #    yellow_dot.header.stamp = now
+        #    yellow_dot.ns = 'surgical_box'
+        #    yellow_dot.id = 6 + i  # Start from ID 6
+        #    yellow_dot.type = Marker.SPHERE
+        #    yellow_dot.action = Marker.ADD
+        #    yellow_dot.pose.position.x = dot_x
+            #yellow_dot.pose.position.y = dot_y
+            #yellow_dot.pose.position.z = center_z
+            #yellow_dot.pose.orientation = Quaternion(w=1.0)
+            #yellow_dot.scale = Vector3(x=0.01, y=0.01, z=0.01)  # 1cm sphere
+            #yellow_dot.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)  # solid yellow
+            #yellow_dot.lifetime.sec = 0
+            #self.marker_pub.publish(yellow_dot)
+        #self.get_logger().info("🟡 Published 5 yellow dots")
 
 def main(args=None):
     rclpy.init(args=args)

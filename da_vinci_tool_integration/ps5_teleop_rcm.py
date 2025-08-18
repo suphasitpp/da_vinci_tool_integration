@@ -11,14 +11,30 @@ class PS5TeleopRCM(Node):
         super().__init__('ps5_teleop_rcm')
 
         # Parameters
-        self.deadzone = 0.1
-        self.scale_xy = 0.002  # meters per step (reduced for slower movement)
-        self.scale_z = 0.002
-        self.psm_step = 0.05   # radians per button press (increased for faster movement)
-        self.publish_rate = 20.0  # Hz
+        self.declare_parameter('publish_rate', 100.0)
+        self.declare_parameter('deadzone', 0.1)
+        self.declare_parameter('scale_xy', 0.0004)
+        self.declare_parameter('scale_z', 0.0004)
+        self.declare_parameter('psm_step', 0.03)
+        self.declare_parameter('psm_velocity_scale', 0.5)  # rad/s for smooth movement
+        
+        self.deadzone = self.get_parameter('deadzone').value
+        self.scale_xy = self.get_parameter('scale_xy').value
+        self.scale_z = self.get_parameter('scale_z').value
+        self.psm_step = self.get_parameter('psm_step').value
+        self.psm_velocity_scale = self.get_parameter('psm_velocity_scale').value
+        self.publish_rate = self.get_parameter('publish_rate').value
 
         # Tool joint positions
         self.psm_joint_positions = {
+            "PSM_outer_roll": 0.0,
+            "PSM_outer_wrist_pitch": 0.0,
+            "PSM_outer_wrist_yaw": 0.0,
+            "PSM_jaw": 0.0
+        }
+        
+        # Tool joint velocities for smooth movement
+        self.psm_joint_velocities = {
             "PSM_outer_roll": 0.0,
             "PSM_outer_wrist_pitch": 0.0,
             "PSM_outer_wrist_yaw": 0.0,
@@ -61,27 +77,36 @@ class PS5TeleopRCM(Node):
         self.handle_tool_joints(msg)
 
     def handle_tool_joints(self, msg):
-        # L1/R1 → roll
+        # L1/R1 → roll (hold-to-move)
         if msg.buttons[4]:  # L1
-            self.update_joint("PSM_outer_roll", -self.psm_step)
-        if msg.buttons[5]:  # R1
-            self.update_joint("PSM_outer_roll", self.psm_step)
+            self.psm_joint_velocities["PSM_outer_roll"] = -self.psm_velocity_scale
+        elif msg.buttons[5]:  # R1
+            self.psm_joint_velocities["PSM_outer_roll"] = self.psm_velocity_scale
+        else:
+            self.psm_joint_velocities["PSM_outer_roll"] = 0.0
 
-        # D-pad pitch/yaw (inverted)
+        # D-pad pitch/yaw (hold-to-move)
         if msg.axes[7] > 0.5:  # D-pad up
-            self.update_joint("PSM_outer_wrist_pitch", -self.psm_step)
-        if msg.axes[7] < -0.5:  # D-pad down
-            self.update_joint("PSM_outer_wrist_pitch", self.psm_step)
+            self.psm_joint_velocities["PSM_outer_wrist_pitch"] = -self.psm_velocity_scale
+        elif msg.axes[7] < -0.5:  # D-pad down
+            self.psm_joint_velocities["PSM_outer_wrist_pitch"] = self.psm_velocity_scale
+        else:
+            self.psm_joint_velocities["PSM_outer_wrist_pitch"] = 0.0
+            
         if msg.axes[6] < -0.5:  # D-pad left
-            self.update_joint("PSM_outer_wrist_yaw", self.psm_step)
-        if msg.axes[6] > 0.5:  # D-pad right
-            self.update_joint("PSM_outer_wrist_yaw", -self.psm_step)
+            self.psm_joint_velocities["PSM_outer_wrist_yaw"] = self.psm_velocity_scale
+        elif msg.axes[6] > 0.5:  # D-pad right
+            self.psm_joint_velocities["PSM_outer_wrist_yaw"] = -self.psm_velocity_scale
+        else:
+            self.psm_joint_velocities["PSM_outer_wrist_yaw"] = 0.0
 
-        # Square / Circle → jaw
+        # Square / Circle → jaw (hold-to-move)
         if msg.buttons[3]:  # Square
-            self.update_joint("PSM_jaw", -self.psm_step)
-        if msg.buttons[1]:  # Circle
-            self.update_joint("PSM_jaw", self.psm_step)
+            self.psm_joint_velocities["PSM_jaw"] = -self.psm_velocity_scale
+        elif msg.buttons[1]:  # Circle
+            self.psm_joint_velocities["PSM_jaw"] = self.psm_velocity_scale
+        else:
+            self.psm_joint_velocities["PSM_jaw"] = 0.0
 
         # Triangle → Reset all tool joints to zero
         if msg.buttons[2]:  # Triangle
@@ -97,6 +122,23 @@ class PS5TeleopRCM(Node):
             self.pub_nudge.publish(self.last_vector)
 
     def publish_tool_joints(self):
+        # Update positions based on velocities (smooth movement)
+        dt = 1.0 / self.publish_rate  # Time step
+        
+        for joint_name in self.psm_joint_positions:
+            # Update position based on velocity
+            new_pos = self.psm_joint_positions[joint_name] + self.psm_joint_velocities[joint_name] * dt
+            
+            # Apply joint limits
+            min_limit, max_limit = self.psm_joint_limits[joint_name]
+            self.psm_joint_positions[joint_name] = max(min(new_pos, max_limit), min_limit)
+            
+            # Stop velocity if we hit limits
+            if (new_pos <= min_limit and self.psm_joint_velocities[joint_name] < 0) or \
+               (new_pos >= max_limit and self.psm_joint_velocities[joint_name] > 0):
+                self.psm_joint_velocities[joint_name] = 0.0
+        
+        # Publish joint state
         msg = JointState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.name = list(self.psm_joint_positions.keys())

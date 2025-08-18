@@ -16,6 +16,8 @@ setup(
             'launch/launchpad_no_rcm.launch.py',
             'launch/interactive_marker_only.launch.py',
             'launch/rcm_command_center.launch.py',
+            'launch/mock_robot_only.launch.py',
+            'launch/teleop_no_rviz.launch.py',
         ]),
         # Install all urdf files
         ('share/' + package_name + '/urdf', [

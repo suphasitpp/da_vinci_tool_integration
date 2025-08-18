@@ -52,7 +52,7 @@
     <joint name="lbr_to_adaptor" type="fixed">
         <parent link="${parent_link}"/>
         <child link="base_link"/>
-        <origin xyz="0 0 0.02" rpy="${PI/2} 0 0"/>
+        <origin xyz="0 0 0.02" rpy="${PI/2} 0 ${PI/2}"/>
     </joint>
 
     <!-- Joint 2: Connect adaptor base_link to PSM base -->

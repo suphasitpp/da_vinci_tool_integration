@@ -16,8 +16,9 @@ setup(
             'launch/launchpad_no_rcm.launch.py',
             'launch/interactive_marker_only.launch.py',
             'launch/rcm_command_center.launch.py',
+            'launch/rcm_command_center_no_tool.launch.py',
             'launch/mock_robot_only.launch.py',
-            'launch/teleop_no_rviz.launch.py',
+            'launch/hardware_robot_only.launch.py',
         ]),
         # Install all urdf files
         ('share/' + package_name + '/urdf', [
@@ -56,6 +57,7 @@ setup(
             'rcm_marker = da_vinci_tool_integration.rcm_marker_publisher:main',
             'rcm_manager = da_vinci_tool_integration.rcm_manager:main',
             'ps5_teleop_rcm = da_vinci_tool_integration.ps5_teleop_rcm:main',
+            'no_tool_ps5_teleop = da_vinci_tool_integration.no_tool_ps5_teleop:main',
             'static_surgical_box = da_vinci_tool_integration.static_surgical_box:main',
         ],
     },

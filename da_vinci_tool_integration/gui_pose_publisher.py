@@ -263,7 +263,7 @@ class PosePublisherGUI(Node):
             return
 
         # Deadzone filtering
-        def clip(val): return 0.0 if abs(val) < 1e-4 else val
+        def clip(val): return 0.0 if abs(val) < 1e-6 else val
         dx, dy, dz = clip(dx), clip(dy), clip(dz)
 
         # Use current tool frame

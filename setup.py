@@ -58,6 +58,7 @@ setup(
             'rcm_manager = da_vinci_tool_integration.rcm_manager:main',
             'ps5_teleop_rcm = da_vinci_tool_integration.ps5_teleop_rcm:main',
             'no_tool_ps5_teleop = da_vinci_tool_integration.no_tool_ps5_teleop:main',
+            'ps5_controller_tool = da_vinci_tool_integration.ps5_controller_tool:main',
             'static_surgical_box = da_vinci_tool_integration.static_surgical_box:main',
         ],
     },

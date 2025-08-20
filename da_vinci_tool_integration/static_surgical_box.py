@@ -12,12 +12,26 @@ class StaticSurgicalBox(Node):
         super().__init__('static_surgical_box')
         self.marker_pub = self.create_publisher(Marker, '/visualization_marker', 10)
         self.create_timer(1.0, self.publish_markers)
-        self.get_logger().info("📦 Static surgical box marker with entry hole running")
+        self.get_logger().info("📦 Static surgical box marker running")
 
     def publish_markers(self):
         now = self.get_clock().now().to_msg()
+        
+        # Box position and orientation
+        box_x = -0.7
+        box_y = 0.0
+        box_z = 0.4  # center of 20cm tall box
+        
+        # Publish main surgical box
+        self._publish_box_marker(now, box_x, box_y, box_z)
+        
+        # Publish corner markers
+        self._publish_corner_markers(now, box_x, box_y, box_z)
+        
+        self.get_logger().info("📦 Published surgical box and corner markers")
 
-        # Transparent Box Marker
+    def _publish_box_marker(self, now, x, y, z):
+        """Publish the main surgical box marker"""
         box = Marker()
         box.header.frame_id = 'world'
         box.header.stamp = now
@@ -25,135 +39,53 @@ class StaticSurgicalBox(Node):
         box.id = 0
         box.type = Marker.CUBE
         box.action = Marker.ADD
-        box.pose.position.x = -0.2
-        box.pose.position.y = 0.85
-        box.pose.position.z = 0.4  # center of 20cm tall box
-        box.pose.orientation = Quaternion(w=1.0)
+        box.pose.position.x = x
+        box.pose.position.y = y
+        box.pose.position.z = z
+        box.pose.orientation = Quaternion(x=0.0, y=0.0, z=0.707, w=0.707)  # 90 degrees around Z
         box.scale = Vector3(x=0.4, y=0.2, z=0.2)  # 40cm x 20cm x 20cm rectangle
         box.color = ColorRGBA(r=0.5, g=0.4, b=0.3, a=0.3)  # semi-transparent
         box.lifetime.sec = 0
         self.marker_pub.publish(box)
-        self.get_logger().info("📦 Published box marker")
 
-        # Red Hole Marker (top center) - COMMENTED OUT
-        # hole = Marker()
-        # hole.header.frame_id = 'world'
-        # hole.header.stamp = now
-        # hole.ns = 'surgical_box'
-        # hole.id = 1
-        # hole.type = Marker.CYLINDER
-        # hole.action = Marker.ADD
-        # hole.pose.position.x = -0.2
-        # hole.pose.position.y = 0.85
-        # hole.pose.position.z = 0.51  # top of cube (0.4 + 0.2/2 + small offset)
-        # hole.pose.orientation = Quaternion(w=1.0)
-        # hole.scale = Vector3(x=0.02, y=0.02, z=0.005)  # 2cm radius, thin height
-        # hole.color = ColorRGBA(r=1.0, g=0.0, b=0.0, a=1.0)  # solid red
-        # hole.lifetime.sec = 0
-        # self.marker_pub.publish(hole)
-
-        # Green corner dots at lower corners of the box (2cm inside from surface)
-        # Box center is at (-0.2, 0.85, 0.4) with size (0.4, 0.2, 0.2)
-        # Lower corners are at z = 0.4 - 0.2/2 = 0.3
-        # Moving 2cm (0.02m) inside from edges
+    def _publish_corner_markers(self, now, box_x, box_y, box_z):
+        """Publish 4 green corner dots around the surgical box"""
+        # Box dimensions and offset
+        box_width = 0.4   # 40cm
+        box_depth = 0.2   # 20cm
+        box_height = 0.2  # 20cm
+        corner_offset = 0.02  # 2cm inside from edges
+        corner_z = box_z - box_height/2 + corner_offset  # bottom of box + 2cm higher
         
-        # Corner 1: Front-left
-        corner1 = Marker()
-        corner1.header.frame_id = 'world'
-        corner1.header.stamp = now
-        corner1.ns = 'surgical_box'
-        corner1.id = 2
-        corner1.type = Marker.SPHERE
-        corner1.action = Marker.ADD
-        corner1.pose.position.x = -0.2 - 0.4/2 + 0.02  # -0.38 (left edge + 2cm inside)
-        corner1.pose.position.y = 0.85 - 0.2/2 + 0.02  # 0.77 (front edge + 2cm inside)
-        corner1.pose.position.z = 0.32  # bottom of box + 2cm higher
-        corner1.pose.orientation = Quaternion(w=1.0)
-        corner1.scale = Vector3(x=0.01, y=0.01, z=0.01)  # 1cm sphere
-        corner1.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)  # solid green
-        corner1.lifetime.sec = 0
-        self.marker_pub.publish(corner1)
-
-        # Corner 2: Front-right
-        corner2 = Marker()
-        corner2.header.frame_id = 'world'
-        corner2.header.stamp = now
-        corner2.ns = 'surgical_box'
-        corner2.id = 3
-        corner2.type = Marker.SPHERE
-        corner2.action = Marker.ADD
-        corner2.pose.position.x = -0.2 + 0.4/2 - 0.02  # -0.02 (right edge - 2cm inside)
-        corner2.pose.position.y = 0.85 - 0.2/2 + 0.02  # 0.77 (front edge + 2cm inside)
-        corner2.pose.position.z = 0.32  # bottom of box + 2cm higher
-        corner2.pose.orientation = Quaternion(w=1.0)
-        corner2.scale = Vector3(x=0.01, y=0.01, z=0.01)  # 1cm sphere
-        corner2.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)  # solid green
-        corner2.lifetime.sec = 0
-        self.marker_pub.publish(corner2)
-
-        # Corner 3: Back-left
-        corner3 = Marker()
-        corner3.header.frame_id = 'world'
-        corner3.header.stamp = now
-        corner3.ns = 'surgical_box'
-        corner3.id = 4
-        corner3.type = Marker.SPHERE
-        corner3.action = Marker.ADD
-        corner3.pose.position.x = -0.2 - 0.4/2 + 0.02  # -0.38 (left edge + 2cm inside)
-        corner3.pose.position.y = 0.85 + 0.2/2 - 0.02  # 0.93 (back edge - 2cm inside)
-        corner3.pose.position.z = 0.32  # bottom of box + 2cm higher
-        corner3.pose.orientation = Quaternion(w=1.0)
-        corner3.scale = Vector3(x=0.01, y=0.01, z=0.01)  # 1cm sphere
-        corner3.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)  # solid green
-        corner3.lifetime.sec = 0
-        self.marker_pub.publish(corner3)
-
-        # Corner 4: Back-right
-        corner4 = Marker()
-        corner4.header.frame_id = 'world'
-        corner4.header.stamp = now
-        corner4.ns = 'surgical_box'
-        corner4.id = 5
-        corner4.type = Marker.SPHERE
-        corner4.action = Marker.ADD
-        corner4.pose.position.x = -0.2 + 0.4/2 - 0.02  # -0.02 (right edge - 2cm inside)
-        corner4.pose.position.y = 0.85 + 0.2/2 - 0.02  # 0.93 (back edge - 2cm inside)
-        corner4.pose.position.z = 0.32  # bottom of box + 2cm higher
-        corner4.pose.orientation = Quaternion(w=1.0)
-        corner4.scale = Vector3(x=0.01, y=0.01, z=0.01)  # 1cm sphere
-        corner4.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)  # solid green
-        corner4.lifetime.sec = 0
-        self.marker_pub.publish(corner4)
-        self.get_logger().info("🟢 Published 4 green corner dots")
-
-        # 5 Yellow dots in the middle of the box
-        #center_x = -0.2  # box center x
-        #center_y = 0.85  # box center y
-        #center_z = 0.4   # box center z
-        #radius = 0.03    # 3cm radius circle (smaller than before)
-        #num_dots = 5     # Only 5 dots
+        # Corner positions (after 90° rotation)
+        corners = [
+            # Front-left
+            (box_x - box_depth/2 + corner_offset, box_y - box_width/2 + corner_offset),
+            # Front-right  
+            (box_x + box_depth/2 - corner_offset, box_y - box_width/2 + corner_offset),
+            # Back-left
+            (box_x - box_depth/2 + corner_offset, box_y + box_width/2 - corner_offset),
+            # Back-right
+            (box_x + box_depth/2 - corner_offset, box_y + box_width/2 - corner_offset)
+        ]
         
-        #for i in range(num_dots):
-        #    angle = 2 * math.pi * i / num_dots
-        #    dot_x = center_x + radius * math.cos(angle)
-        #    dot_y = center_y + radius * math.sin(angle)
-            
-        #    yellow_dot = Marker()
-        #    yellow_dot.header.frame_id = 'world'
-        #    yellow_dot.header.stamp = now
-        #    yellow_dot.ns = 'surgical_box'
-        #    yellow_dot.id = 6 + i  # Start from ID 6
-        #    yellow_dot.type = Marker.SPHERE
-        #    yellow_dot.action = Marker.ADD
-        #    yellow_dot.pose.position.x = dot_x
-            #yellow_dot.pose.position.y = dot_y
-            #yellow_dot.pose.position.z = center_z
-            #yellow_dot.pose.orientation = Quaternion(w=1.0)
-            #yellow_dot.scale = Vector3(x=0.01, y=0.01, z=0.01)  # 1cm sphere
-            #yellow_dot.color = ColorRGBA(r=1.0, g=1.0, b=0.0, a=1.0)  # solid yellow
-            #yellow_dot.lifetime.sec = 0
-            #self.marker_pub.publish(yellow_dot)
-        #self.get_logger().info("🟡 Published 5 yellow dots")
+        # Publish each corner marker
+        for i, (corner_x, corner_y) in enumerate(corners):
+            corner = Marker()
+            corner.header.frame_id = 'world'
+            corner.header.stamp = now
+            corner.ns = 'surgical_box'
+            corner.id = 2 + i  # Start from ID 2
+            corner.type = Marker.SPHERE
+            corner.action = Marker.ADD
+            corner.pose.position.x = corner_x
+            corner.pose.position.y = corner_y
+            corner.pose.position.z = corner_z
+            corner.pose.orientation = Quaternion(w=1.0)
+            corner.scale = Vector3(x=0.01, y=0.01, z=0.01)  # 1cm sphere
+            corner.color = ColorRGBA(r=0.0, g=1.0, b=0.0, a=1.0)  # solid green
+            corner.lifetime.sec = 0
+            self.marker_pub.publish(corner)
 
 def main(args=None):
     rclpy.init(args=args)

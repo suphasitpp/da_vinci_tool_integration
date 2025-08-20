@@ -81,7 +81,7 @@ ros2 launch da_vinci_tool_integration rcm_command_center.launch.py
 #### 4. Surgical Workspace Test
 ```bash
 # Launch static surgical box visualization
-ros2 run da_vinci_tool_integration static_surgical_box.py
+ros2 run da_vinci_tool_integration static_surgical_box
 ```
 
 ### Hardware Deployment

@@ -13,7 +13,7 @@ class PS5TeleopRCM(Node):
         # Parameters
         self.declare_parameter('publish_rate', 100.0)
         self.declare_parameter('deadzone', 0.05)
-        self.declare_parameter('scale_xy', 0.002)
+        self.declare_parameter('scale_xy', 0.01)
         self.declare_parameter('scale_z', 0.04)
         
         self.deadzone = self.get_parameter('deadzone').value

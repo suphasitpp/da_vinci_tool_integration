@@ -18,8 +18,8 @@ class StaticSurgicalBox(Node):
         now = self.get_clock().now().to_msg()
         
         # Box position and orientation
-        box_x = -0.7
-        box_y = 0.0
+        box_x = 0.7
+        box_y = 0.2
         box_z = 0.4  # center of 20cm tall box
         
         # Publish main surgical box
